@@ -1,4 +1,8 @@
 import os
+import time
+import argparse
+
+
 
 import misc
 import model
@@ -6,9 +10,10 @@ import dataset
 
 import torch
 import torch.nn.functional as F
+from torch import distributed as dist
 
 
-def train(model, train_loader, optimizer, epoch, local_rank):
+def train(model, train_loader, optimizer, epoch):
     model.train()
     epoch_loss = 0
     for idx, (data, target) in enumerate(train_loader):
@@ -23,11 +28,11 @@ def train(model, train_loader, optimizer, epoch, local_rank):
         loss.backward()
         optimizer.step()
 
-        if idx % 100 == 0 and local_rank == 0 :
+        if idx % 100 == 0 and dist.get_rank() == 0 :
             print("Train Epoch: {}, iterantion: {}, Loss: {}".format(epoch, idx, epoch_loss.item()))
 
 
-def test(model, test_loader, local_rank):
+def test(model, test_loader):
     model.eval()
     total_loss = 0.
     total_correct = 0.
@@ -47,7 +52,7 @@ def test(model, test_loader, local_rank):
         total_loss /= len(test_loader.dataset)
         acc = total_correct / len(test_loader.dataset) * 100
 
-        if local_rank == 0:
+        if dist.get_rank() == 0:
             print("Test loss: {}, Accuracy: {}".format(total_loss, acc))
 
 
@@ -59,22 +64,14 @@ def reduce_tensor(tensor):
             tensor /= dist.get_world_size()
 
     return tensor
+import torch.distributed.launch
 
-
-import argparse
-import time
-from torch import distributed as dist
 time_ = time.time()
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--local_rank', type=int, default=0)
 args = parser.parse_args()
 
-gpu = misc.auto_select_gpu(
-        utility_bound=0,
-        num_gpu=dist.get_world_size(),
-        selected_gpus=None)
-ngpu = len(gpu)
 torch.cuda.set_device(args.local_rank)
 device = torch.device(f'cuda:{args.local_rank}')
 torch.distributed.init_process_group(
@@ -82,12 +79,14 @@ torch.distributed.init_process_group(
     init_method='env://'
 )
 
+gpu = misc.auto_select_gpu(
+        num_gpu=dist.get_world_size(),
+        selected_gpus=None)
+
 num_eopchs = 20
 batch_size = 128
 lr = 0.01
 momentum = 0.5
-
-cuda = torch.cuda.is_available()
 
 train_loader, test_loader = dataset.generate_dataset(batch_size=batch_size)
 model = model.LeNet()
@@ -100,8 +99,8 @@ model = torch.nn.parallel.DistributedDataParallel(model,
 
 # train
 for eopch in range(num_eopchs):
-    train(model, train_loader, optimizer, eopch, args.local_rank)
-    test(model, test_loader, args.local_rank)
+    train(model, train_loader, optimizer, eopch)
+    test(model, test_loader)
 a = time.time()-time_
 print("{:.2f}s".format(a))
 torch.save(model.state_dict(), "mnist_lenet.pt")

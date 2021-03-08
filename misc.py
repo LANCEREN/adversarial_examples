@@ -1,4 +1,4 @@
-def auto_select_gpu(mem_bound=500, utility_bound=0, gpus=(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15),
+def auto_select_gpu(mem_bound=500, utility_bound=5, gpus=(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15),
                     num_gpu=1, selected_gpus=None):
     import sys
     import os
@@ -34,5 +34,5 @@ def auto_select_gpu(mem_bound=500, utility_bound=0, gpus=(0, 1, 2, 3, 4, 5, 6, 7
 
     print("Setting GPU: {}".format(selected_gpus))
     os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(selected_gpus)
-    os.environ["OMP_NUM_THREADS"] = str(1)
+
     return selected_gpus
